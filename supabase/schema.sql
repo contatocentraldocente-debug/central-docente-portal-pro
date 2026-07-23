@@ -1,0 +1,13 @@
+create extension if not exists "pgcrypto";
+create table if not exists public.profiles(id uuid primary key references auth.users(id) on delete cascade,full_name text,role text not null default 'teacher' check(role in('teacher','admin')),school text,created_at timestamptz not null default now());
+create table if not exists public.documents(id uuid primary key default gen_random_uuid(),title text not null,description text,category text not null,storage_path text not null unique,file_type text,is_active boolean not null default true,created_at timestamptz not null default now());
+create table if not exists public.download_events(id uuid primary key default gen_random_uuid(),document_id uuid not null references public.documents(id) on delete cascade,user_id uuid not null references auth.users(id) on delete cascade,downloaded_at timestamptz not null default now());
+alter table public.profiles enable row level security;alter table public.documents enable row level security;alter table public.download_events enable row level security;
+create policy "profile own read" on public.profiles for select using(auth.uid()=id);
+create policy "authenticated read active documents" on public.documents for select to authenticated using(is_active=true);
+create policy "own downloads read" on public.download_events for select to authenticated using(auth.uid()=user_id);
+create policy "own downloads insert" on public.download_events for insert to authenticated with check(auth.uid()=user_id);
+create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path=public as $$ begin insert into public.profiles(id,full_name) values(new.id,new.raw_user_meta_data->>'full_name') on conflict(id) do nothing;return new;end;$$;
+create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
+insert into storage.buckets(id,name,public) values('documentos-docentes','documentos-docentes',false) on conflict(id) do update set public=false;
+create policy "authenticated storage downloads" on storage.objects for select to authenticated using(bucket_id='documentos-docentes');

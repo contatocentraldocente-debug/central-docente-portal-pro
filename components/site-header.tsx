@@ -1,0 +1,1 @@
+import Link from "next/link";export function SiteHeader(){return <header className="header"><div className="container inner"><Link className="brand" href="/">Central Docente</Link><Link className="button" href="/login">Entrar</Link></div></header>}
